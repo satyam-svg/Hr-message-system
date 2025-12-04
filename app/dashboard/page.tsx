@@ -109,19 +109,65 @@ export default function UserDashboard() {
     { id: 5, name: "Lisa Brown", email: "lisa.brown@digital.co", company: "Digital Innovations", position: "Technical Recruiter", status: "pending" }
   ];
 
+  const processFiles = async (files: File[]) => {
+    setUploadedFiles(prev => [...prev, ...files]);
+    setIsProcessing(true);
+
+    const uploadPromise = (async () => {
+      const formData = new FormData();
+      formData.append("file", files[0]);
+
+      const token = Cookies.get("token");
+      const headers: HeadersInit = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const response = await fetch("http://localhost:8080/upload", {
+        method: "POST",
+        body: formData,
+        headers: headers,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const data = await response.json();
+      const contacts = Array.isArray(data) ? data : (data.contacts || []);
+      
+      const formattedContacts = contacts.map((c: any, index: number) => ({
+        id: c.id || Date.now() + index,
+        name: c.name || "Unknown",
+        email: c.email || "N/A",
+        company: c.company_name || c.company || "Unknown",
+        position: c.position || "Recruiter",
+        status: "pending"
+      }));
+
+      setExtractedContacts(prev => [...prev, ...formattedContacts]);
+      return formattedContacts;
+    })();
+
+    toast.promise(uploadPromise, {
+      loading: 'Extracting contacts...',
+      success: 'Contacts extracted successfully!',
+      error: 'Failed to extract contacts.',
+    });
+
+    try {
+      await uploadPromise;
+    } catch (error) {
+      console.error("Error uploading file:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      const newFiles = Array.from(files);
-      setUploadedFiles(prev => [...prev, ...newFiles]);
-      
-      // Simulate AI processing
-      setIsProcessing(true);
-      setTimeout(() => {
-        setIsProcessing(false);
-        setExtractedContacts(sampleContacts);
-        setEmailSent(2);
-      }, 2000);
+      processFiles(Array.from(files));
     }
   };
 
@@ -133,15 +179,7 @@ export default function UserDashboard() {
     event.preventDefault();
     const files = event.dataTransfer.files;
     if (files && files.length > 0) {
-      const newFiles = Array.from(files);
-      setUploadedFiles(prev => [...prev, ...newFiles]);
-      
-      setIsProcessing(true);
-      setTimeout(() => {
-        setIsProcessing(false);
-        setExtractedContacts(sampleContacts);
-        setEmailSent(2);
-      }, 2000);
+      processFiles(Array.from(files));
     }
   };
 
@@ -149,15 +187,107 @@ export default function UserDashboard() {
     fileInputRef.current?.click();
   };
 
-  const sendEmails = () => {
+  const sendEmails = async () => {
+    if (isProcessing) return;
+    
+    const pendingContacts = extractedContacts.filter(c => c.status !== 'sent');
+    if (pendingContacts.length === 0) {
+      toast.success("All contacts have already been emailed!");
+      return;
+    }
+
+    if (!settings.professionalEmail || !settings.appPassword) {
+      toast.error("Please configure your email settings first.");
+      setActiveTab("settings");
+      return;
+    }
+
     setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setEmailSent(5);
-      setExtractedContacts(prev => 
-        prev.map(contact => ({ ...contact, status: "sent" }))
-      );
-    }, 3000);
+    let sentCount = 0;
+
+    for (let i = 0; i < pendingContacts.length; i++) {
+      const contact = pendingContacts[i];
+      
+      // Rate limiting: Wait 2 minutes before sending the next email (except the first one)
+      if (i > 0) {
+        toast.loading(`Waiting 2 minutes before sending next email...`, { duration: 5000 });
+        await new Promise(resolve => setTimeout(resolve, 120000));
+      }
+
+      try {
+        // Template replacement
+        let subject = defaultTemplate.subject;
+        let body = defaultTemplate.body;
+
+        const replacements: Record<string, string> = {
+          '{name}': contact.name,
+          '{company}': contact.company,
+          '{position}': contact.position || 'Recruiter',
+          '{Hiring Manager Name}': contact.name,
+          '{Company}': contact.company,
+          '{Position}': contact.position || 'Recruiter'
+        };
+
+        Object.entries(replacements).forEach(([key, value]) => {
+          subject = subject.replaceAll(key, value);
+          body = body.replaceAll(key, value);
+        });
+
+        const response = await fetch("http://localhost:8080/api/email/send", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Cookies.get("token")}`,
+          },
+          body: JSON.stringify({
+            sender_email: settings.professionalEmail,
+            sender_password: settings.appPassword,
+            recipient_email: contact.email,
+            subject: subject,
+            body: body
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to send to ${contact.email}`);
+        }
+
+        // Update status in backend
+        try {
+          await fetch(`http://localhost:8080/api/contacts/${contact.id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Cookies.get("token")}`,
+            },
+            body: JSON.stringify({
+              is_sent: true
+            }),
+          });
+        } catch (updateError) {
+          console.error(`Failed to update status for ${contact.id}:`, updateError);
+          // Don't stop the process, just log the error
+        }
+
+        // Update status locally
+        setExtractedContacts(prev => 
+          prev.map(c => c.id === contact.id ? { ...c, status: 'sent' } : c)
+        );
+        
+        setEmailSent(prev => prev + 1);
+        sentCount++;
+        toast.success(`Email sent to ${contact.name}`);
+
+      } catch (error) {
+        console.error(`Error sending email to ${contact.name}:`, error);
+        toast.error(`Failed to send email to ${contact.name}`);
+      }
+    }
+
+    setIsProcessing(false);
+    if (sentCount > 0) {
+      toast.success(`Process completed. Sent ${sentCount} emails.`);
+    }
   };
 
   const handleLogout = () => {
