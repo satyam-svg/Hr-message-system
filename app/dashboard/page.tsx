@@ -39,6 +39,14 @@ export default function UserDashboard() {
     body: ''
   });
   
+  // UI Logging State
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prev => [`[${timestamp}] ${message}`, ...prev]);
+  };
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -47,7 +55,7 @@ export default function UserDashboard() {
       if (!token) return;
 
       try {
-        const response = await fetch("http://127.0.0.1:8080/api/auth/me", {
+        const response = await fetch("https://hr-message-backend-2.onrender.com/api/auth/me", {
           headers: {
             "Authorization": `Bearer ${token}`,
           },
@@ -123,7 +131,7 @@ export default function UserDashboard() {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const response = await fetch("http://localhost:8080/upload", {
+      const response = await fetch("https://hr-message-backend-2.onrender.com/upload", {
         method: "POST",
         body: formData,
         headers: headers,
@@ -207,33 +215,41 @@ export default function UserDashboard() {
 
     for (let i = 0; i < pendingContacts.length; i++) {
       const contact = pendingContacts[i];
+      console.log(contact)
       
-      // Rate limiting: Wait 2 minutes before sending the next email (except the first one)
-      if (i > 0) {
-        toast.loading(`Waiting 2 minutes before sending next email...`, { duration: 5000 });
-        await new Promise(resolve => setTimeout(resolve, 120000));
-      }
+      // Rate limiting removed by user request
+      // if (i > 0) { ... }
 
       try {
-        // Template replacement
+        // Template replacement with robust matching and logging
         let subject = defaultTemplate.subject;
         let body = defaultTemplate.body;
 
-        const replacements: Record<string, string> = {
-          '{name}': contact.name,
-          '{company}': contact.company,
-          '{position}': contact.position || 'Recruiter',
-          '{Hiring Manager Name}': contact.name,
-          '{Company}': contact.company,
-          '{Position}': contact.position || 'Recruiter'
+        console.log(`[Email Debug] Preparing email for ${contact.email}`);
+        addLog(`Preparing email for ${contact.name} (${contact.email})...`);
+        console.log(`[Email Debug] Raw Subject: "${subject}"`);
+
+        const replacementMap: Record<string, string> = {
+          'name': contact.name,
+          'company': contact.company,
+          'position': contact.position || 'Recruiter',
+          'Hiring Manager Name': contact.name,
+          'Company': contact.company,
+          'Position': contact.position || 'Recruiter'
         };
 
-        Object.entries(replacements).forEach(([key, value]) => {
-          subject = subject.replaceAll(key, value);
-          body = body.replaceAll(key, value);
+        Object.entries(replacementMap).forEach(([key, value]) => {
+           // Match {key} case-insensitive
+           const regex = new RegExp(`{${key}}`, 'gi');
+           subject = subject.replace(regex, value);
+           body = body.replace(regex, value);
         });
 
-        const response = await fetch("http://localhost:8080/api/email/send", {
+        console.log(`[Email Debug] Final Subject: "${subject}"`);
+        addLog(`Replaced placeholders. Subject: "${subject}"`);
+        console.log(`[Email Debug] Final Body (first 200 chars): "${body.substring(0, 200)}..."`);
+
+        const response = await fetch("https://hr-message-backend-2.onrender.com/api/email/send", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -254,8 +270,8 @@ export default function UserDashboard() {
 
         // Update status in backend
         try {
-          await fetch(`http://localhost:8080/api/contacts/${contact.id}`, {
-            method: "PUT",
+          await fetch(`https://hr-message-backend-2.onrender.com/api/contacts/${contact.id}`, {
+            method: "PATCH",
             headers: {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${Cookies.get("token")}`,
@@ -277,10 +293,12 @@ export default function UserDashboard() {
         setEmailSent(prev => prev + 1);
         sentCount++;
         toast.success(`Email sent to ${contact.name}`);
+        addLog(`SUCCESS: Email sent to ${contact.email}`);
 
       } catch (error) {
         console.error(`Error sending email to ${contact.name}:`, error);
         toast.error(`Failed to send email to ${contact.name}`);
+        addLog(`ERROR: Failed to send to ${contact.email}. check console for details.`);
       }
     }
 
@@ -308,7 +326,7 @@ export default function UserDashboard() {
     }
 
     try {
-      const response = await fetch("http://127.0.0.1:8080/api/auth/email-settings", {
+      const response = await fetch("https://hr-message-backend-2.onrender.com/api/auth/email-settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -363,7 +381,7 @@ export default function UserDashboard() {
     }
 
     try {
-      const response = await fetch("http://127.0.0.1:8080/api/template/enhance", {
+      const response = await fetch("https://hr-message-backend-2.onrender.com/api/template/enhance", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -537,6 +555,16 @@ export default function UserDashboard() {
                     }`}
                   >
                     Email Templates
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("logs")}
+                    className={`py-4 px-6 text-sm font-medium border-b-2 whitespace-nowrap ${
+                      activeTab === "logs"
+                        ? "border-blue-500 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    Activity Logs
                   </button>
                 </nav>
               </div>
@@ -908,6 +936,31 @@ export default function UserDashboard() {
                         </form>
                       </div>
                     )}
+                  </div>
+                )}
+                
+                {activeTab === "logs" && (
+                  <div>
+                    <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-lg font-medium text-gray-900">Activity Logs</h3>
+                      <button
+                        onClick={() => setLogs([])}
+                        className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Clear Logs
+                      </button>
+                    </div>
+                    <div className="bg-gray-900 rounded-xl p-4 h-96 overflow-y-auto font-mono text-sm">
+                      {logs.length === 0 ? (
+                        <p className="text-gray-500 italic">No activity logs yet...</p>
+                      ) : (
+                        logs.map((log, index) => (
+                          <div key={index} className="mb-2 text-gray-300 border-b border-gray-800 pb-1 last:border-0 last:pb-0">
+                            {log}
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

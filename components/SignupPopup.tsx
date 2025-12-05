@@ -30,7 +30,7 @@ export default function SignupPopup({ isOpen, onClose, onSwitchToLogin }: Signup
     setLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8080/api/auth/signup", {
+      const response = await fetch("https://hr-message-backend-2.onrender.com/api/auth/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
