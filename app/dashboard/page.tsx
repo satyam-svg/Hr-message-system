@@ -25,14 +25,27 @@ interface Template {
   isDefault?: boolean;
 }
 
+interface Activity {
+  id: string;
+  description: string;
+  created_at: string;
+}
+
 export default function UserDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("upload");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [extractedContacts, setExtractedContacts] = useState<Contact[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [emailSent, setEmailSent] = useState(0);
   const [userName, setUserName] = useState("User");
+  
+  // Stats State
+  const [stats, setStats] = useState({
+    pdfCount: 0,
+    emailsSent: 0,
+    dailyLimit: 20
+  });
+
   const [settings, setSettings] = useState({
     professionalEmail: "",
     appPassword: ""
@@ -88,18 +101,34 @@ export default function UserDashboard() {
             setUserName(data.name);
           }
 
+          // Set Stats
+          setStats({
+            pdfCount: data.pdf_upload_count || 0,
+            emailsSent: data.emails_sent || 0,
+            dailyLimit: data.daily_limit || 20
+          });
+
           // Set contacts from API
           if (data.contacts && Array.isArray(data.contacts)) {
-            setExtractedContacts(data.contacts.map((c: Contact & { company_name?: string }) => ({
+            setExtractedContacts(data.contacts.map((c: any) => ({
               id: c.id,
               name: c.name,
               email: c.email,
-              company: c.company_name,
-              position: "Recruiter", // Default or N/A as it's missing in API
+              company: c.company_name || c.company || "Unknown",
+              position: "Recruiter",
               status: c.is_sent ? "sent" : "pending"
             })));
           }
           
+          // Set Activities/Logs
+          if (data.activities && Array.isArray(data.activities)) {
+            const formattedLogs = data.activities.map((a: Activity) => {
+              const time = new Date(a.created_at).toLocaleTimeString();
+              return `[${time}] ${a.description}`;
+            });
+            setLogs(formattedLogs);
+          }
+
           // Set settings from API
           if (data.professional_email || data.mail_app_password) {
             setSettings({
@@ -121,6 +150,7 @@ export default function UserDashboard() {
         }
       } catch (error) {
         console.error("Error fetching user profile:", error);
+        toast.error("Failed to load user profile");
       }
     };
 
@@ -301,7 +331,7 @@ export default function UserDashboard() {
           prev.map(c => c.id === contact.id ? { ...c, status: 'sent' } : c)
         );
         
-        setEmailSent(prev => prev + 1);
+        setStats(prev => ({ ...prev, emailsSent: prev.emailsSent + 1 }));
         sentCount++;
         toast.success(`Email sent to ${contact.name}`);
         addLog(`SUCCESS: Email sent to ${contact.email}`);
@@ -474,7 +504,7 @@ export default function UserDashboard() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">PDFs Uploaded</p>
-                <p className="text-2xl font-bold text-gray-900">{uploadedFiles.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.pdfCount}</p>
               </div>
             </div>
           </div>
@@ -502,7 +532,7 @@ export default function UserDashboard() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Emails Sent</p>
-                <p className="text-2xl font-bold text-gray-900">{emailSent}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.emailsSent}</p>
               </div>
             </div>
           </div>
@@ -516,7 +546,7 @@ export default function UserDashboard() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Daily Limit</p>
-                <p className="text-2xl font-bold text-gray-900">20/20</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.emailsSent}/{stats.dailyLimit}</p>
               </div>
             </div>
           </div>
@@ -1015,12 +1045,12 @@ export default function UserDashboard() {
                 <div>
                   <div className="flex justify-between text-sm text-gray-600 mb-1">
                     <span>Emails Sent</span>
-                    <span>{emailSent}/20</span>
+                    <span>{stats.emailsSent}/{stats.dailyLimit}</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                      style={{ width: `${(emailSent / 20) * 100}%` }}
+                      style={{ width: `${(stats.emailsSent / stats.dailyLimit) * 100}%` }}
                     ></div>
                   </div>
                 </div>
