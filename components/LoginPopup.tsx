@@ -58,9 +58,9 @@ export default function LoginPopup({ isOpen, onClose, onSwitchToSignup }: LoginP
       } else {
         throw new Error("No token received");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Login error:", err);
-      const errorMessage = err.message || "An error occurred during login";
+      const errorMessage = err instanceof Error ? err.message : "An error occurred during login";
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -206,7 +206,7 @@ export default function LoginPopup({ isOpen, onClose, onSwitchToSignup }: LoginP
 
         {/* Signup Link */}
         <p className="text-center text-gray-400 text-sm mt-6">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <button
             type="button"
             onClick={onSwitchToSignup}

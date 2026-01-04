@@ -59,9 +59,9 @@ export default function SignupPopup({ isOpen, onClose, onSwitchToLogin }: Signup
       } else {
         throw new Error("No token received");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Signup error:", err);
-      const errorMessage = err.message || "An error occurred during signup";
+      const errorMessage = err instanceof Error ? err.message : "An error occurred during signup";
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {

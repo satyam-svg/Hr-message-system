@@ -6,11 +6,30 @@ import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
 
+
+interface Contact {
+  id: number | string;
+  name: string;
+  email: string;
+  company: string;
+  position: string;
+  status: string;
+  is_sent?: boolean;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  isDefault?: boolean;
+}
+
 export default function UserDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("upload");
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [extractedContacts, setExtractedContacts] = useState<any[]>([]);
+  const [extractedContacts, setExtractedContacts] = useState<Contact[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [emailSent, setEmailSent] = useState(0);
   const [userName, setUserName] = useState("User");
@@ -30,7 +49,7 @@ export default function UserDashboard() {
     isDefault: true
   });
   
-  const [customTemplates, setCustomTemplates] = useState<any[]>([]);
+  const [customTemplates, setCustomTemplates] = useState<Template[]>([]);
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
   const [isEnhancingTemplate, setIsEnhancingTemplate] = useState(false);
   const [newTemplate, setNewTemplate] = useState({
@@ -71,7 +90,7 @@ export default function UserDashboard() {
 
           // Set contacts from API
           if (data.contacts && Array.isArray(data.contacts)) {
-            setExtractedContacts(data.contacts.map((c: any) => ({
+            setExtractedContacts(data.contacts.map((c: Contact & { company_name?: string }) => ({
               id: c.id,
               name: c.name,
               email: c.email,
@@ -108,14 +127,6 @@ export default function UserDashboard() {
     fetchUserProfile();
   }, []);
 
-  // Sample extracted contacts data
-  const sampleContacts = [
-    { id: 1, name: "Sarah Johnson", email: "sarah.johnson@techcorp.com", company: "TechCorp Inc", position: "HR Manager", status: "pending" },
-    { id: 2, name: "Mike Chen", email: "mike.chen@innovate.com", company: "Innovate Solutions", position: "Talent Acquisition", status: "sent" },
-    { id: 3, name: "Emily Davis", email: "emily.davis@startup.io", company: "Startup Ventures", position: "Recruitment Lead", status: "pending" },
-    { id: 4, name: "David Wilson", email: "d.wilson@enterprise.com", company: "Enterprise Systems", position: "HR Director", status: "sent" },
-    { id: 5, name: "Lisa Brown", email: "lisa.brown@digital.co", company: "Digital Innovations", position: "Technical Recruiter", status: "pending" }
-  ];
 
   const processFiles = async (files: File[]) => {
     setUploadedFiles(prev => [...prev, ...files]);
@@ -144,7 +155,7 @@ export default function UserDashboard() {
       const data = await response.json();
       const contacts = Array.isArray(data) ? data : (data.contacts || []);
       
-      const formattedContacts = contacts.map((c: any, index: number) => ({
+      const formattedContacts: Contact[] = contacts.map((c: Partial<Contact> & { company_name?: string }, index: number) => ({
         id: c.id || Date.now() + index,
         name: c.name || "Unknown",
         email: c.email || "N/A",
@@ -748,7 +759,7 @@ export default function UserDashboard() {
                           required
                         />
                         <p className="mt-1 text-sm text-gray-500">
-                          Generate an App Password from your email provider's security settings.
+                          Generate an App Password from your email provider&apos;s security settings.
                           <a href="#" className="text-blue-600 hover:text-blue-500 ml-1">Learn how</a>
                         </p>
                       </div>
@@ -1026,7 +1037,7 @@ export default function UserDashboard() {
                 <div className="flex items-start space-x-3">
                   <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
                   <div>
-                    <p className="text-sm text-gray-700">PDF "Tech Companies HR List" processed</p>
+                    <p className="text-sm text-gray-700">PDF &quot;Tech Companies HR List&quot; processed</p>
                     <p className="text-xs text-gray-500">5 contacts extracted • 2 minutes ago</p>
                   </div>
                 </div>
