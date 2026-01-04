@@ -31,6 +31,15 @@ interface Activity {
   created_at: string;
 }
 
+interface ApiContact {
+  id: number | string;
+  name: string;
+  email: string;
+  company_name?: string;
+  company?: string;
+  is_sent?: boolean;
+}
+
 export default function UserDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("upload");
@@ -108,9 +117,10 @@ export default function UserDashboard() {
             dailyLimit: data.daily_limit || 20
           });
 
+
           // Set contacts from API
           if (data.contacts && Array.isArray(data.contacts)) {
-            setExtractedContacts(data.contacts.map((c: any) => ({
+            setExtractedContacts(data.contacts.map((c: ApiContact) => ({
               id: c.id,
               name: c.name,
               email: c.email,
